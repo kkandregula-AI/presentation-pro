@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Presentation Video Studio</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar glass">
+      <div class="logo-wrap">
+        <div class="logo-dot"></div>
+        <div>
+          <h1>Presentation Video Studio</h1>
+          <p>Manual screen-by-screen premium builder</p>
+        </div>
+      </div>
+
+      <section class="section-block">
+        <h2>Project</h2>
+        <label>Presentation Title
+          <input id="projectTitle" type="text" placeholder="Enter title" />
+        </label>
+        <label>Subtitle
+          <input id="projectSubtitle" type="text" placeholder="Optional subtitle" />
+        </label>
+        <label>Aspect Ratio
+          <select id="aspectRatio">
+            <option value="16:9">16:9 Landscape</option>
+            <option value="9:16">9:16 Portrait</option>
+          </select>
+        </label>
+        <label>Theme
+          <select id="theme">
+            <option value="midnight">Midnight Glass</option>
+            <option value="ivory">Ivory Pro</option>
+            <option value="carbon">Carbon Luxe</option>
+          </select>
+        </label>
+        <label>Presenter Photo
+          <input id="presenterUpload" type="file" accept="image/*" />
+        </label>
+        <div id="presenterPreview" class="presenter-preview hidden"></div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-header">
+          <h2>Screens</h2>
+          <button id="addScreenBtn" class="btn btn-primary">+ Add Screen</button>
+        </div>
+        <div id="screenList" class="screen-list"></div>
+      </section>
+
+      <section class="section-block">
+        <button id="renderBtn" class="btn btn-accent wide">Render MP4</button>
+        <div id="renderStatus" class="status-text">Add screens and click Render MP4.</div>
+      </section>
+    </aside>
+
+    <main class="workspace">
+      <section class="editor glass">
+        <div class="editor-header">
+          <h2>Screen Editor</h2>
+          <div class="toolbar">
+            <button id="duplicateBtn" class="btn btn-ghost" disabled>Duplicate</button>
+            <button id="deleteBtn" class="btn btn-danger" disabled>Delete</button>
+          </div>
+        </div>
+        <div id="emptyState" class="empty-state">
+          Select a screen or add one to start building your video.
+        </div>
+        <div id="editorForm" class="editor-form hidden">
+          <div class="grid two">
+            <label>Layout
+              <select id="screenLayout">
+                <option value="image-right-text-left">Image Right + Text Left</option>
+                <option value="image-left-text-right">Image Left + Text Right</option>
+                <option value="title-bullets">Title + Bullets</option>
+                <option value="full-image-overlay">Full Image + Overlay</option>
+                <option value="two-column-text">Two Column Text</option>
+                <option value="section-divider">Section Divider</option>
+              </select>
+            </label>
+            <label>Slide Duration (seconds)
+              <input id="screenDuration" type="number" min="2" placeholder="Auto if empty" />
+            </label>
+          </div>
+
+          <div class="grid two">
+            <label>Title
+              <input id="screenTitle" type="text" placeholder="Slide title" />
+            </label>
+            <label>Subtitle / Tag
+              <input id="screenSubtitle" type="text" placeholder="Optional tag" />
+            </label>
+          </div>
+
+          <label>Bullets (one per line)
+            <textarea id="screenBullets" rows="6" placeholder="Point 1&#10;Point 2&#10;Point 3"></textarea>
+          </label>
+          <label>Body Text
+            <textarea id="screenBody" rows="6" placeholder="Additional description"></textarea>
+          </label>
+
+          <div class="grid two">
+            <label>Screen Image
+              <input id="screenImageUpload" type="file" accept="image/*" />
+            </label>
+            <div id="screenImagePreview" class="image-preview muted-box">No image uploaded</div>
+          </div>
+
+          <div class="voice-panel">
+            <h3>Voice-over</h3>
+            <div class="grid three">
+              <label>Voice Type
+                <select id="voiceType">
+                  <option value="none">None</option>
+                  <option value="builtin-female">Built-in Female</option>
+                  <option value="builtin-male">Built-in Male</option>
+                  <option value="elevenlabs-custom">ElevenLabs Custom Voice ID</option>
+                </select>
+              </label>
+              <label>ElevenLabs Voice ID
+                <input id="elevenVoiceId" type="text" placeholder="Optional voice ID" />
+              </label>
+              <div class="voice-note muted-box">Built-in male/female map to default ElevenLabs voices on the server.</div>
+            </div>
+            <label>Voice-over Text
+              <textarea id="voiceOverText" rows="5" placeholder="Only this text will be spoken"></textarea>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section class="preview-pane glass">
+        <div class="editor-header">
+          <h2>Live Preview</h2>
+          <span class="preview-badge">Visual guide</span>
+        </div>
+        <div id="previewFrame" class="preview-frame"></div>
+        <div id="outputWrap" class="output-wrap hidden">
+          <h3>Rendered Video</h3>
+          <video id="outputVideo" controls></video>
+          <a id="downloadVideo" class="btn btn-primary" href="#" download>Download MP4</a>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>
