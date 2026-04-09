@@ -21,6 +21,10 @@ for (const dir of [PUBLIC_DIR, UPLOAD_DIR, RENDER_DIR, TMP_DIR]) {
   fs.mkdirSync(dir, {recursive: true});
 }
 
+console.log('ELEVENLABS_API_KEY present:', !!process.env.ELEVENLABS_API_KEY);
+console.log('Default male voice:', process.env.ELEVENLABS_DEFAULT_MALE_VOICE_ID || 'JBFqnCBsd6RMkjVDRZzb');
+console.log('Default female voice:', process.env.ELEVENLABS_DEFAULT_FEMALE_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL');
+
 app.use(cors());
 app.use(express.json({limit: '25mb'}));
 app.use(express.urlencoded({extended: true, limit: '25mb'}));
@@ -57,7 +61,7 @@ function toFsPath(publicUrl = '') {
 }
 
 function estimateSeconds(text = '') {
-  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  const words = String(text).trim().split(/\s+/).filter(Boolean).length;
   if (!words) return 4;
   return Math.max(4, Math.ceil(words / 2.4));
 }
@@ -86,7 +90,9 @@ async function writeSilenceMp3(outPath, seconds) {
 
 async function elevenLabsTts({text, voiceId, outputPath}) {
   const apiKey = process.env.ELEVENLABS_API_KEY;
-  if (!apiKey || !text.trim() || !voiceId) return false;
+  if (!apiKey || !String(text).trim()) {
+    throw new Error('ELEVENLABS_API_KEY missing or voice text empty');
+  }
 
   const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
     method: 'POST',
@@ -117,29 +123,17 @@ async function elevenLabsTts({text, voiceId, outputPath}) {
   return true;
 }
 
-function resolveVoiceId(screen) {
+function resolveVoiceId(screen = {}) {
   if (screen.voiceType === 'elevenlabs-custom' && screen.elevenVoiceId) return screen.elevenVoiceId;
   if (screen.voiceType === 'builtin-male') return DEFAULT_VOICES['builtin-male'];
   if (screen.voiceType === 'builtin-female') return DEFAULT_VOICES['builtin-female'];
   return '';
 }
 
-function normalizeBullets(screen) {
-  if (Array.isArray(screen.bullets) && screen.bullets.length) {
-    return screen.bullets.map(v => String(v).trim()).filter(Boolean);
-  }
-  if (typeof screen.body === 'string' && screen.body.trim()) {
-    return screen.body.split('\n').map(v => v.trim()).filter(Boolean);
-  }
-  return [];
-}
-
 async function screenshotHtml({payload, outputPath, width, height, tempDir}) {
   const jsonPath = path.join(tempDir, `${uuidv4()}.json`);
   fs.writeFileSync(jsonPath, JSON.stringify({...payload, width, height}, null, 2), 'utf8');
-  await execFileAsync('python3', [path.join(ROOT, 'render_slide.py'), jsonPath, outputPath], {
-    maxBuffer: 1024 * 1024 * 20,
-  });
+  await execFileAsync('python3', [path.join(ROOT, 'render_slide.py'), jsonPath, outputPath], {maxBuffer: 1024 * 1024 * 20});
 }
 
 async function createSegment({imagePath, audioPath, seconds, segmentPath, width, height}) {
@@ -173,7 +167,7 @@ async function concatSegments(listPath, outputPath) {
 }
 
 app.get('/api/health', (_req, res) => {
-  res.json({ok: true, port: PORT});
+  res.json({ok: true, port: PORT, elevenLabsKeyPresent: !!process.env.ELEVENLABS_API_KEY});
 });
 
 app.post('/api/upload', upload.single('file'), (req, res) => {
@@ -194,7 +188,6 @@ app.post('/api/render', async (req, res) => {
   try {
     const project = req.body || {};
     const screens = Array.isArray(project.screens) ? project.screens : [];
-
     if (!screens.length) {
       return res.status(400).json({error: 'Add at least one screen before rendering.'});
     }
@@ -204,31 +197,34 @@ app.post('/api/render', async (req, res) => {
 
     for (let i = 0; i < screens.length; i += 1) {
       const screen = {...screens[i], index: i};
-      const slidePngPath = path.join(tempDir, `slide-${i + 1}.png`);
+      const imagePath = path.join(tempDir, `slide-${i + 1}.png`);
       const audioPath = path.join(tempDir, `audio-${i + 1}.mp3`);
       const segmentPath = path.join(tempDir, `segment-${i + 1}.mp4`);
 
-      const normalizedBullets = normalizeBullets(screen);
+      const normalizedBullets =
+        Array.isArray(screen.bullets) && screen.bullets.length
+          ? screen.bullets.filter(Boolean)
+          : typeof screen.body === 'string'
+            ? screen.body.split('\n').map(s => s.trim()).filter(Boolean)
+            : [];
+
       const resolvedImagePath = screen.imageUrl ? toFsPath(screen.imageUrl) : '';
       const resolvedPresenterPath = project.presenterPhotoUrl ? toFsPath(project.presenterPhotoUrl) : '';
 
-      console.log('RENDER SCREEN', JSON.stringify({
-        index: i + 1,
-        title: screen.title || '',
-        layout: screen.layout || 'image-right-text-left',
-        imageUrl: screen.imageUrl || '',
+      console.log('RENDER SCREEN', {
+        title: screen.title,
+        imageUrl: screen.imageUrl,
         resolvedImagePath,
         imageExists: resolvedImagePath ? fs.existsSync(resolvedImagePath) : false,
-        bulletsCount: normalizedBullets.length,
         bullets: normalizedBullets,
         presenterExists: resolvedPresenterPath ? fs.existsSync(resolvedPresenterPath) : false,
-      }));
+      });
 
       await screenshotHtml({
         payload: {
-          theme: project.theme,
-          projectTitle: project.title || 'Presentation',
-          projectSubtitle: project.subtitle || '',
+          theme: project.theme || 'midnight',
+          projectTitle: project.title || 'Premium Presentation',
+          projectSubtitle: project.subtitle || 'Manual screen-by-screen builder',
           title: screen.title || 'Untitled Slide',
           subtitle: screen.subtitle || '',
           body: screen.body || '',
@@ -238,70 +234,75 @@ app.post('/api/render', async (req, res) => {
           presenterPath: resolvedPresenterPath,
           slideLabel: `${i + 1} / ${screens.length}`,
         },
-        outputPath: slidePngPath,
+        outputPath: imagePath,
         width: aspect.width,
         height: aspect.height,
         tempDir,
       });
 
-      const voiceText = (screen.voiceOverText || screen.voice || '').trim();
-      const voiceId = resolveVoiceId(screen);
+      let seconds = Number(screen.durationSeconds) || 0;
+      const wantsVoice = (screen.voiceType && screen.voiceType !== 'none') && (screen.voiceOverText || '').trim();
 
-      if (voiceText && voiceId && process.env.ELEVENLABS_API_KEY) {
-        await elevenLabsTts({text: voiceText, voiceId, outputPath: audioPath});
-      } else {
-        const seconds = voiceText ? estimateSeconds(voiceText) : 4;
-        await writeSilenceMp3(audioPath, seconds);
+      if (wantsVoice) {
+        const voiceId = resolveVoiceId(screen);
+        if (!process.env.ELEVENLABS_API_KEY) {
+          throw new Error('ELEVENLABS_API_KEY is missing in Railway Variables.');
+        }
+        if (!voiceId) {
+          throw new Error(`No voice id resolved for screen "${screen.title || i + 1}".`);
+        }
+
+        try {
+          await elevenLabsTts({text: screen.voiceOverText, voiceId, outputPath: audioPath});
+          seconds = Math.max(seconds, Math.ceil(await ffprobeDuration(audioPath)));
+        } catch (error) {
+          console.error('TTS failed:', error.message);
+          throw new Error(`ElevenLabs TTS failed: ${error.message}`);
+        }
       }
 
-      let duration = 0;
-      try {
-        duration = await ffprobeDuration(audioPath);
-      } catch (_err) {
-        duration = 0;
-      }
-      if (!duration || Number.isNaN(duration)) {
-        duration = voiceText ? estimateSeconds(voiceText) : 4;
+      if (!fs.existsSync(audioPath)) {
+        const fallbackText =
+          String(screen.voiceOverText || '').trim() ||
+          [screen.title || '', screen.subtitle || '', screen.body || '', ...normalizedBullets]
+            .filter(Boolean)
+            .join('. ');
+
+        seconds = seconds || estimateSeconds(fallbackText);
+
+        if (!fallbackText.trim()) {
+          await writeSilenceMp3(audioPath, seconds);
+        } else {
+          throw new Error(`No audio file was generated for screen "${screen.title || i + 1}".`);
+        }
       }
 
-      await createSegment({
-        imagePath: slidePngPath,
-        audioPath,
-        seconds: duration,
-        segmentPath,
-        width: aspect.width,
-        height: aspect.height,
-      });
-
+      seconds = Math.max(2, seconds || 5);
+      await createSegment({imagePath, audioPath, seconds, segmentPath, width: aspect.width, height: aspect.height});
       segmentPaths.push(segmentPath);
     }
 
-    const listPath = path.join(tempDir, 'segments.txt');
+    const concatPath = path.join(tempDir, 'concat.txt');
     fs.writeFileSync(
-      listPath,
-      segmentPaths.map(segment => `file '${segment.replace(/'/g, "'\\''")}'`).join('\n'),
+      concatPath,
+      segmentPaths.map(file => `file '${file.replace(/'/g, `'\\''`)}'`).join('\n'),
       'utf8'
     );
 
-    const finalPath = path.join(RENDER_DIR, `render-${jobId}.mp4`);
-    await concatSegments(listPath, finalPath);
+    const finalPath = path.join(RENDER_DIR, `${jobId}.mp4`);
+    await concatSegments(concatPath, finalPath);
 
-    return res.json({
+    res.json({
       ok: true,
       videoUrl: `/renders/${path.basename(finalPath)}`,
-      elapsedSeconds: Number(((Date.now() - started) / 1000).toFixed(1)),
-      usedElevenLabs: Boolean(process.env.ELEVENLABS_API_KEY),
+      fallbackAudio: false,
+      renderMs: Date.now() - started,
     });
   } catch (error) {
-    console.error('RENDER FAILED', error);
-    return res.status(500).json({
-      ok: false,
-      error: error.message || 'Render failed',
-    });
+    console.error(error);
+    res.status(500).json({error: error.message || 'Failed to render video'});
   } finally {
-    try {
-      fs.rmSync(tempDir, {recursive: true, force: true});
-    } catch (_err) {}
+    fs.rmSync(tempDir, {recursive: true, force: true});
   }
 });
 

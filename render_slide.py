@@ -13,10 +13,10 @@ THEMES = {
         "bg1": (9, 17, 31),
         "bg2": (16, 25, 53),
         "bg3": (13, 27, 61),
-        "card": (255, 255, 255, 20),
-        "border": (255, 255, 255, 52),
+        "card": (10, 18, 34, 235),
+        "border": (255, 255, 255, 70),
         "title": (255, 255, 255),
-        "text": (232, 237, 248),
+        "text": (245, 248, 255),
         "accent": (124, 152, 255),
         "accent2": (135, 239, 255),
     },
@@ -24,10 +24,10 @@ THEMES = {
         "bg1": (255, 250, 242),
         "bg2": (247, 239, 227),
         "bg3": (242, 234, 220),
-        "card": (255, 255, 255, 150),
-        "border": (27, 35, 58, 28),
+        "card": (255, 255, 255, 245),
+        "border": (27, 35, 58, 35),
         "title": (27, 35, 58),
-        "text": (54, 64, 91),
+        "text": (40, 48, 70),
         "accent": (0, 90, 214),
         "accent2": (122, 92, 255),
     },
@@ -35,23 +35,20 @@ THEMES = {
         "bg1": (17, 18, 19),
         "bg2": (31, 35, 40),
         "bg3": (13, 13, 16),
-        "card": (255, 255, 255, 18),
-        "border": (255, 255, 255, 42),
+        "card": (22, 26, 34, 235),
+        "border": (255, 255, 255, 55),
         "title": (247, 249, 255),
-        "text": (223, 230, 242),
+        "text": (240, 244, 250),
         "accent": (0, 212, 255),
         "accent2": (143, 124, 255),
     },
 }
 
-
 def font(path, size):
     return ImageFont.truetype(path, size=size)
 
-
 def rounded_rectangle(draw, box, radius, fill, outline=None, width=1):
     draw.rounded_rectangle(box, radius=radius, fill=fill, outline=outline, width=width)
-
 
 def make_gradient(size, c1, c2, c3):
     w, h = size
@@ -66,7 +63,6 @@ def make_gradient(size, c1, c2, c3):
             px[x, y] = b
     return img
 
-
 def glow(base, center, radius, color):
     overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
@@ -75,9 +71,8 @@ def glow(base, center, radius, color):
     overlay = overlay.filter(ImageFilter.GaussianBlur(radius // 2))
     return Image.alpha_composite(base.convert("RGBA"), overlay)
 
-
 def wrap_text(draw, text, fnt, max_width):
-    words = text.split()
+    words = str(text).split()
     lines = []
     current = ""
     for word in words:
@@ -91,7 +86,6 @@ def wrap_text(draw, text, fnt, max_width):
     if current:
         lines.append(current)
     return lines or [""]
-
 
 def draw_paragraph(draw, text, box, fnt, fill, line_gap=10):
     x1, y1, x2, y2 = box
@@ -111,7 +105,6 @@ def draw_paragraph(draw, text, box, fnt, fill, line_gap=10):
             break
     return y
 
-
 def draw_bullets(draw, bullets, box, fnt, fill, bullet_color, line_gap=12):
     x1, y1, x2, y2 = box
     y = y1
@@ -127,7 +120,6 @@ def draw_bullets(draw, bullets, box, fnt, fill, bullet_color, line_gap=12):
                 return y
         y += 4
     return y
-
 
 def fit_and_paste(base, img_path, box, radius=24, contain=True):
     x1, y1, x2, y2 = map(int, box)
@@ -151,7 +143,6 @@ def fit_and_paste(base, img_path, box, radius=24, contain=True):
     mdraw.rounded_rectangle((0, 0, w, h), radius=radius, fill=255)
     base.paste(canvas, (x1, y1), mask)
 
-
 def draw_presenter(base, img_path, box):
     x1, y1, x2, y2 = map(int, box)
     w, h = x2 - x1, y2 - y1
@@ -168,18 +159,18 @@ def draw_presenter(base, img_path, box):
     ImageDraw.Draw(border).rounded_rectangle((0, 0, w - 1, h - 1), radius=24, outline=(255, 255, 255, 180), width=2)
     base.alpha_composite(border, (x1, y1))
 
-
 def main():
     src = Path(sys.argv[1])
     out = Path(sys.argv[2])
     payload = json.loads(src.read_text())
     width = int(payload["width"])
     height = int(payload["height"])
-    theme = THEMES.get(payload.get("theme", "midnight"), THEMES["midnight"])
+    theme_name = payload.get("theme", "midnight")
+    theme = THEMES.get(theme_name, THEMES["midnight"])
     title = payload.get("title", "Untitled Slide")
     subtitle = payload.get("subtitle", "")
     body = payload.get("body", "")
-    bullets = payload.get("bullets", []) or []
+    bullets = payload.get("bullets", [])
     if not bullets and body:
         bullets = [line.strip() for line in str(body).split("\n") if line.strip()]
     layout = payload.get("layout", "image-right-text-left")
@@ -236,7 +227,7 @@ def main():
         if not text:
             return y
         tw = int(draw.textlength(text, font=subtitle_f)) + 28
-        rounded_rectangle(draw, (x, y, x + tw, y + 34), 17, (255, 255, 255, 18), outline=theme["border"], width=1)
+        rounded_rectangle(draw, (x, y, x + tw, y + 34), 17, (255,255,255,18), outline=theme["border"], width=1)
         draw.text((x + 14, y + 8), text, font=subtitle_f, fill=theme["title"])
         return y + 48
 
@@ -248,14 +239,12 @@ def main():
         draw.multiline_text((x1 + 34, y), title, font=title_f, fill=theme["title"], spacing=6)
         title_h = 70 if not portrait else 64
         y += title_h + 10
+        content_fill = theme["title"] if theme_name == "midnight" else theme["text"]
         if bullets:
-            y = draw_bullets(draw, bullets, (x1 + 34, y, x2 - 30, y2 - 36), bullet_f, theme["text"], theme["accent2"])
-            y += 8
-        elif body:
-            y = draw_bullets(draw, [line.strip() for line in str(body).split("\n") if line.strip()], (x1 + 34, y, x2 - 30, y2 - 36), bullet_f, theme["text"], theme["accent2"])
+            y = draw_bullets(draw, bullets, (x1 + 34, y, x2 - 30, y2 - 36), bullet_f, content_fill, theme["accent2"])
             y += 8
         if body:
-            draw_paragraph(draw, body, (x1 + 34, y, x2 - 30, y2 - 30), body_f, theme["text"])
+            draw_paragraph(draw, body, (x1 + 34, y, x2 - 30, y2 - 30), body_f, content_fill)
 
     if layout in ("image-right-text-left", "image-left-text-right"):
         gap = 24
@@ -273,7 +262,7 @@ def main():
         if image_path and os.path.exists(image_path):
             fit_and_paste(base, image_path, (media_box[0] + 18, media_box[1] + 18, media_box[2] - 18, media_box[3] - 18), contain=True)
         else:
-            rounded_rectangle(draw, (media_box[0] + 18, media_box[1] + 18, media_box[2] - 18, media_box[3] - 18), 22, (255, 255, 255, 12), outline=theme["border"], width=2)
+            rounded_rectangle(draw, (media_box[0] + 18, media_box[1] + 18, media_box[2] - 18, media_box[3] - 18), 22, (255,255,255,12), outline=theme["border"], width=2)
             msg = "Drop screen image here"
             tw = draw.textlength(msg, font=body_f)
             draw.text((media_box[0] + ((media_box[2]-media_box[0])-tw)/2, media_box[1] + (media_box[3]-media_box[1])/2 - 12), msg, font=body_f, fill=theme["title"])
@@ -307,35 +296,44 @@ def main():
         mid = content_left + (content_right - content_left) // 2
         left_col = (content_left + 34, y, mid - inner_gap, content_bottom - 34)
         right_col = (mid + inner_gap, y, content_right - 34, content_bottom - 34)
+        content_fill = theme["title"] if theme_name == "midnight" else theme["text"]
         if bullets:
-            draw_bullets(draw, bullets, left_col, bullet_f, theme["text"], theme["accent2"])
-        elif body:
-            draw_bullets(draw, [line.strip() for line in str(body).split("\n") if line.strip()], left_col, bullet_f, theme["text"], theme["accent2"])
+            draw_bullets(draw, bullets, left_col, bullet_f, content_fill, theme["accent2"])
+        else:
+            draw.text((left_col[0], left_col[1]), "Add bullet points", font=body_f, fill=content_fill)
         if body:
-            draw_paragraph(draw, body, right_col, body_f, theme["text"])
+            draw_paragraph(draw, body, right_col, body_f, content_fill)
+        else:
+            draw.text((right_col[0], right_col[1]), "Add body text", font=body_f, fill=content_fill)
 
     elif layout == "section-divider":
-        y = int((content_top + content_bottom) / 2)
+        y = (content_top + content_bottom) // 2
         draw.line((content_left, y, content_right, y), fill=theme["accent"], width=3)
-        box_w = int((content_right - content_left) * 0.78)
-        box_h = 240 if not portrait else 280
-        box = (
-            content_left + (content_right - content_left - box_w) // 2,
-            y - box_h // 2,
-            content_left + (content_right - content_left - box_w) // 2 + box_w,
-            y + box_h // 2,
-        )
+        box_w = int((content_right - content_left) * (0.72 if not portrait else 0.86))
+        box_h = int((content_bottom - content_top) * (0.36 if not portrait else 0.28))
+        box = ((width - box_w)//2, (height - box_h)//2, (width + box_w)//2, (height + box_h)//2)
         card(box, radius=30)
-        text_block(box)
+        y = add_tag(box[0] + 34, box[1] + 30, subtitle)
+        if not subtitle:
+            y = box[1] + 30
+        tw = draw.textlength(title, font=title_f)
+        draw.text((box[0] + (box_w - tw)/2, y), title, font=title_f, fill=theme["title"])
+        if body:
+            content_fill = theme["title"] if theme_name == "midnight" else theme["text"]
+            draw_paragraph(draw, body, (box[0] + 50, y + 84, box[2] - 50, box[3] - 30), body_f, content_fill)
 
     if presenter_path and os.path.exists(presenter_path):
-        if portrait:
-            draw_presenter(base, presenter_path, (34, height - 150, 150, height - 34))
-        else:
-            draw_presenter(base, presenter_path, (30, height - 128, 130, height - 28))
+        size = 100 if not portrait else 116
+        draw_presenter(base, presenter_path, (outer_pad - (26 if portrait else 30), height - outer_pad - size + (18 if portrait else 26), outer_pad - (26 if portrait else 30) + size, height - outer_pad + (18 if portrait else 26)))
 
-    base.convert("RGB").save(out, "PNG")
+    footer_tag = f"{layout}"
+    fw = int(draw.textlength(footer_tag, font=meta_f)) + 30
+    fx = width - outer_pad - fw
+    fy = height - outer_pad
+    rounded_rectangle(draw, (fx, fy - 36, fx + fw, fy), 18, theme["card"], outline=theme["border"], width=1)
+    draw.text((fx + 14, fy - 26), footer_tag, font=meta_f, fill=theme["title"])
 
+    base.convert("RGB").save(out, quality=95)
 
 if __name__ == "__main__":
     main()
