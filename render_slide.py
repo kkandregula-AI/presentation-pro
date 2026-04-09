@@ -7,6 +7,20 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 ROOT = Path(__file__).resolve().parent
 FONT_REG = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+ROBOTO_CANDIDATES = [
+    "/usr/share/fonts/truetype/roboto/unhinted/RobotoTTF/Roboto-Regular.ttf",
+    "/usr/share/fonts/truetype/roboto/unhinted/Roboto-Regular.ttf",
+    "/usr/share/fonts/truetype/roboto/Roboto-Regular.ttf",
+    "/usr/share/fonts/truetype/msttcorefonts/Roboto.ttf",
+]
+
+def pick_font_path(*candidates):
+    for candidate in candidates:
+        if candidate and os.path.exists(candidate):
+            return candidate
+    return FONT_REG
+
+FONT_BULLET = pick_font_path(*ROBOTO_CANDIDATES)
 
 THEMES = {
     "midnight": {
@@ -200,7 +214,7 @@ def main():
     title_f = font(FONT_BOLD, 54 if not portrait else 44)
     subtitle_f = font(FONT_REG, 16 if not portrait else 15)
     body_f = font(FONT_REG, 24 if not portrait else 25)
-    bullet_f = font(FONT_REG, 25 if not portrait else 26)
+    bullet_f = font(FONT_BULLET, 25 if not portrait else 26)
     project_f = font(FONT_BOLD, 24 if not portrait else 26)
     meta_f = font(FONT_REG, 14)
 

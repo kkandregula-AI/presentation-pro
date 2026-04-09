@@ -60,6 +60,17 @@ function toFsPath(publicUrl = '') {
   return path.join(PUBLIC_DIR, clean);
 }
 
+function sanitizeFilename(value = '') {
+  const cleaned = String(value)
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._ -]+/g, '')
+    .trim()
+    .replace(/\s+/g, ' ');
+
+  return cleaned || 'Presentation';
+}
+
 function estimateSeconds(text = '') {
   const words = String(text).trim().split(/\s+/).filter(Boolean).length;
   if (!words) return 4;
@@ -124,7 +135,18 @@ async function elevenLabsTts({text, voiceId, outputPath}) {
 }
 
 function resolveVoiceId(screen = {}) {
-  if (screen.voiceType === 'elevenlabs-custom' && screen.elevenVoiceId) return screen.elevenVoiceId;
+  const customVoiceId = [
+    screen.elevenVoiceId,
+    screen.elevenLabsVoiceId,
+    screen.elevenlabsVoiceId,
+    screen.customVoiceId,
+    screen.voiceId,
+  ]
+    .map(value => String(value || '').trim())
+    .find(Boolean);
+
+  if (screen.voiceType === 'none') return '';
+  if (customVoiceId) return customVoiceId;
   if (screen.voiceType === 'builtin-male') return DEFAULT_VOICES['builtin-male'];
   if (screen.voiceType === 'builtin-female') return DEFAULT_VOICES['builtin-female'];
   return '';
@@ -289,7 +311,8 @@ app.post('/api/render', async (req, res) => {
       'utf8'
     );
 
-    const finalPath = path.join(RENDER_DIR, `${jobId}.mp4`);
+    const finalBaseName = sanitizeFilename(project.title || 'Presentation');
+    const finalPath = path.join(RENDER_DIR, `${finalBaseName}.mp4`);
     await concatSegments(concatPath, finalPath);
 
     res.json({
