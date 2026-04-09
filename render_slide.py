@@ -1,5 +1,4 @@
 import json
-import math
 import os
 import sys
 from pathlib import Path
@@ -97,7 +96,7 @@ def wrap_text(draw, text, fnt, max_width):
 def draw_paragraph(draw, text, box, fnt, fill, line_gap=10):
     x1, y1, x2, y2 = box
     lines = []
-    for paragraph in text.split("\n"):
+    for paragraph in str(text).split("\n"):
         if not paragraph.strip():
             lines.append("")
             continue
@@ -119,9 +118,9 @@ def draw_bullets(draw, bullets, box, fnt, fill, bullet_color, line_gap=12):
     ascent, descent = fnt.getmetrics()
     line_h = ascent + descent + line_gap
     for bullet in bullets:
-        lines = wrap_text(draw, bullet, fnt, x2 - x1 - 28)
+        lines = wrap_text(draw, str(bullet), fnt, x2 - x1 - 28)
         draw.ellipse((x1, y + 12, x1 + 10, y + 22), fill=bullet_color)
-        for idx, line in enumerate(lines):
+        for line in lines:
             draw.text((x1 + 24, y), line, font=fnt, fill=fill)
             y += line_h
             if y > y2:
@@ -180,7 +179,9 @@ def main():
     title = payload.get("title", "Untitled Slide")
     subtitle = payload.get("subtitle", "")
     body = payload.get("body", "")
-    bullets = payload.get("bullets", [])
+    bullets = payload.get("bullets", []) or []
+    if not bullets and body:
+        bullets = [line.strip() for line in str(body).split("\n") if line.strip()]
     layout = payload.get("layout", "image-right-text-left")
     project_title = payload.get("projectTitle", "Presentation")
     project_subtitle = payload.get("projectSubtitle", "")
@@ -188,6 +189,15 @@ def main():
     image_path = payload.get("imagePath") or ""
     presenter_path = payload.get("presenterPath") or ""
     portrait = width < height
+
+    print("TITLE:", title)
+    print("LAYOUT:", layout)
+    print("IMAGE_PATH:", image_path)
+    print("IMAGE_EXISTS:", os.path.exists(image_path) if image_path else False)
+    print("BULLETS:", bullets)
+    print("BODY:", body)
+    print("PRESENTER_PATH:", presenter_path)
+    print("PRESENTER_EXISTS:", os.path.exists(presenter_path) if presenter_path else False)
 
     base = make_gradient((width, height), theme["bg1"], theme["bg2"], theme["bg3"]).convert("RGBA")
     base = glow(base, (int(width * 0.12), int(height * 0.12)), int(min(width, height) * 0.16), (*theme["accent"], 110))
@@ -226,7 +236,7 @@ def main():
         if not text:
             return y
         tw = int(draw.textlength(text, font=subtitle_f)) + 28
-        rounded_rectangle(draw, (x, y, x + tw, y + 34), 17, (255,255,255,18), outline=theme["border"], width=1)
+        rounded_rectangle(draw, (x, y, x + tw, y + 34), 17, (255, 255, 255, 18), outline=theme["border"], width=1)
         draw.text((x + 14, y + 8), text, font=subtitle_f, fill=theme["title"])
         return y + 48
 
@@ -240,6 +250,9 @@ def main():
         y += title_h + 10
         if bullets:
             y = draw_bullets(draw, bullets, (x1 + 34, y, x2 - 30, y2 - 36), bullet_f, theme["text"], theme["accent2"])
+            y += 8
+        elif body:
+            y = draw_bullets(draw, [line.strip() for line in str(body).split("\n") if line.strip()], (x1 + 34, y, x2 - 30, y2 - 36), bullet_f, theme["text"], theme["accent2"])
             y += 8
         if body:
             draw_paragraph(draw, body, (x1 + 34, y, x2 - 30, y2 - 30), body_f, theme["text"])
@@ -260,7 +273,7 @@ def main():
         if image_path and os.path.exists(image_path):
             fit_and_paste(base, image_path, (media_box[0] + 18, media_box[1] + 18, media_box[2] - 18, media_box[3] - 18), contain=True)
         else:
-            rounded_rectangle(draw, (media_box[0] + 18, media_box[1] + 18, media_box[2] - 18, media_box[3] - 18), 22, (255,255,255,12), outline=theme["border"], width=2)
+            rounded_rectangle(draw, (media_box[0] + 18, media_box[1] + 18, media_box[2] - 18, media_box[3] - 18), 22, (255, 255, 255, 12), outline=theme["border"], width=2)
             msg = "Drop screen image here"
             tw = draw.textlength(msg, font=body_f)
             draw.text((media_box[0] + ((media_box[2]-media_box[0])-tw)/2, media_box[1] + (media_box[3]-media_box[1])/2 - 12), msg, font=body_f, fill=theme["title"])
@@ -296,40 +309,32 @@ def main():
         right_col = (mid + inner_gap, y, content_right - 34, content_bottom - 34)
         if bullets:
             draw_bullets(draw, bullets, left_col, bullet_f, theme["text"], theme["accent2"])
-        else:
-            draw.text((left_col[0], left_col[1]), "Add bullet points", font=body_f, fill=theme["text"])
+        elif body:
+            draw_bullets(draw, [line.strip() for line in str(body).split("\n") if line.strip()], left_col, bullet_f, theme["text"], theme["accent2"])
         if body:
             draw_paragraph(draw, body, right_col, body_f, theme["text"])
-        else:
-            draw.text((right_col[0], right_col[1]), "Add body text", font=body_f, fill=theme["text"])
 
     elif layout == "section-divider":
-        y = (content_top + content_bottom) // 2
+        y = int((content_top + content_bottom) / 2)
         draw.line((content_left, y, content_right, y), fill=theme["accent"], width=3)
-        box_w = int((content_right - content_left) * (0.72 if not portrait else 0.86))
-        box_h = int((content_bottom - content_top) * (0.36 if not portrait else 0.28))
-        box = ((width - box_w)//2, (height - box_h)//2, (width + box_w)//2, (height + box_h)//2)
+        box_w = int((content_right - content_left) * 0.78)
+        box_h = 240 if not portrait else 280
+        box = (
+            content_left + (content_right - content_left - box_w) // 2,
+            y - box_h // 2,
+            content_left + (content_right - content_left - box_w) // 2 + box_w,
+            y + box_h // 2,
+        )
         card(box, radius=30)
-        y = add_tag(box[0] + 34, box[1] + 30, subtitle)
-        if not subtitle:
-            y = box[1] + 30
-        tw = draw.textlength(title, font=title_f)
-        draw.text((box[0] + (box_w - tw)/2, y), title, font=title_f, fill=theme["title"])
-        if body:
-            draw_paragraph(draw, body, (box[0] + 50, y + 84, box[2] - 50, box[3] - 30), body_f, theme["text"])
+        text_block(box)
 
     if presenter_path and os.path.exists(presenter_path):
-        size = 100 if not portrait else 116
-        draw_presenter(base, presenter_path, (outer_pad - (26 if portrait else 30), height - outer_pad - size + (18 if portrait else 26), outer_pad - (26 if portrait else 30) + size, height - outer_pad + (18 if portrait else 26)))
+        if portrait:
+            draw_presenter(base, presenter_path, (34, height - 150, 150, height - 34))
+        else:
+            draw_presenter(base, presenter_path, (30, height - 128, 130, height - 28))
 
-    footer_tag = f"{layout}"
-    fw = int(draw.textlength(footer_tag, font=meta_f)) + 30
-    fx = width - outer_pad - fw
-    fy = height - outer_pad
-    rounded_rectangle(draw, (fx, fy - 36, fx + fw, fy), 18, theme["card"], outline=theme["border"], width=1)
-    draw.text((fx + 14, fy - 26), footer_tag, font=meta_f, fill=theme["title"])
-
-    base.convert("RGB").save(out, quality=95)
+    base.convert("RGB").save(out, "PNG")
 
 
 if __name__ == "__main__":
