@@ -3,6 +3,7 @@ FROM node:22-bookworm
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
+    python3-venv \
     ffmpeg \
     ca-certificates \
     fonts-dejavu-core \
@@ -12,15 +13,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install Node deps
 COPY package*.json ./
 RUN npm ci --omit=dev
 
-# Install Python deps
-COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
+COPY requirements.txt ./
 
-# Copy app
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN pip install --no-cache-dir --upgrade pip
+RUN pip install --no-cache-dir -r requirements.txt
+
 COPY . .
 
 ENV NODE_ENV=production
