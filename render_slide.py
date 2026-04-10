@@ -5,22 +5,26 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 ROOT = Path(__file__).resolve().parent
-FONT_REG = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-ROBOTO_CANDIDATES = [
+
+ROBOTO_REG_CANDIDATES = [
     "/usr/share/fonts/truetype/roboto/unhinted/RobotoTTF/Roboto-Regular.ttf",
-    "/usr/share/fonts/truetype/roboto/unhinted/Roboto-Regular.ttf",
     "/usr/share/fonts/truetype/roboto/Roboto-Regular.ttf",
-    "/usr/share/fonts/truetype/msttcorefonts/Roboto.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+]
+ROBOTO_BOLD_CANDIDATES = [
+    "/usr/share/fonts/truetype/roboto/unhinted/RobotoTTF/Roboto-Bold.ttf",
+    "/usr/share/fonts/truetype/roboto/Roboto-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
 ]
 
-def pick_font_path(*candidates):
-    for candidate in candidates:
-        if candidate and os.path.exists(candidate):
-            return candidate
-    return FONT_REG
+def existing_font(candidates):
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+    return candidates[-1]
 
-FONT_BULLET = pick_font_path(*ROBOTO_CANDIDATES)
+FONT_REG = existing_font(ROBOTO_REG_CANDIDATES)
+FONT_BOLD = existing_font(ROBOTO_BOLD_CANDIDATES)
 
 THEMES = {
     "midnight": {
@@ -85,13 +89,16 @@ def glow(base, center, radius, color):
     overlay = overlay.filter(ImageFilter.GaussianBlur(radius // 2))
     return Image.alpha_composite(base.convert("RGBA"), overlay)
 
+def text_width(draw, text, fnt):
+    return draw.textlength(text, font=fnt)
+
 def wrap_text(draw, text, fnt, max_width):
     words = str(text).split()
     lines = []
     current = ""
     for word in words:
         test = word if not current else current + " " + word
-        if draw.textlength(test, font=fnt) <= max_width:
+        if text_width(draw, test, fnt) <= max_width:
             current = test
         else:
             if current:
@@ -101,7 +108,11 @@ def wrap_text(draw, text, fnt, max_width):
         lines.append(current)
     return lines or [""]
 
-def draw_paragraph(draw, text, box, fnt, fill, line_gap=10):
+def centered_text(draw, text, y, fnt, fill, cx):
+    tw = text_width(draw, text, fnt)
+    draw.text((cx - tw / 2, y), text, font=fnt, fill=fill)
+
+def draw_centered_paragraph(draw, text, box, fnt, fill, line_gap=12):
     x1, y1, x2, y2 = box
     lines = []
     for paragraph in str(text).split("\n"):
@@ -112,27 +123,33 @@ def draw_paragraph(draw, text, box, fnt, fill, line_gap=10):
     y = y1
     ascent, descent = fnt.getmetrics()
     line_h = ascent + descent + line_gap
+    cx = (x1 + x2) / 2
     for line in lines:
-        draw.text((x1, y), line, font=fnt, fill=fill)
+        centered_text(draw, line, y, fnt, fill, cx)
         y += line_h
         if y > y2:
             break
     return y
 
-def draw_bullets(draw, bullets, box, fnt, fill, bullet_color, line_gap=12):
+def draw_centered_bullets(draw, bullets, box, fnt, fill, bullet_color, line_gap=14):
     x1, y1, x2, y2 = box
     y = y1
+    cx = (x1 + x2) / 2
     ascent, descent = fnt.getmetrics()
     line_h = ascent + descent + line_gap
     for bullet in bullets:
-        lines = wrap_text(draw, str(bullet), fnt, x2 - x1 - 28)
-        draw.ellipse((x1, y + 12, x1 + 10, y + 22), fill=bullet_color)
-        for line in lines:
-            draw.text((x1 + 24, y), line, font=fnt, fill=fill)
+        lines = wrap_text(draw, str(bullet), fnt, x2 - x1 - 90)
+        for idx, line in enumerate(lines):
+            tw = text_width(draw, line, fnt)
+            block_w = tw + 38
+            left = cx - (block_w / 2)
+            if idx == 0:
+                draw.ellipse((left, y + 12, left + 10, y + 22), fill=bullet_color)
+            draw.text((left + 24, y), line, font=fnt, fill=fill)
             y += line_h
             if y > y2:
                 return y
-        y += 4
+        y += 8
     return y
 
 def fit_and_paste(base, img_path, box, radius=24, contain=True):
@@ -195,15 +212,6 @@ def main():
     presenter_path = payload.get("presenterPath") or ""
     portrait = width < height
 
-    print("TITLE:", title)
-    print("LAYOUT:", layout)
-    print("IMAGE_PATH:", image_path)
-    print("IMAGE_EXISTS:", os.path.exists(image_path) if image_path else False)
-    print("BULLETS:", bullets)
-    print("BODY:", body)
-    print("PRESENTER_PATH:", presenter_path)
-    print("PRESENTER_EXISTS:", os.path.exists(presenter_path) if presenter_path else False)
-
     base = make_gradient((width, height), theme["bg1"], theme["bg2"], theme["bg3"]).convert("RGBA")
     base = glow(base, (int(width * 0.12), int(height * 0.12)), int(min(width, height) * 0.16), (*theme["accent"], 110))
     base = glow(base, (int(width * 0.9), int(height * 0.85)), int(min(width, height) * 0.18), (*theme["accent2"], 80))
@@ -214,7 +222,7 @@ def main():
     title_f = font(FONT_BOLD, 54 if not portrait else 44)
     subtitle_f = font(FONT_REG, 16 if not portrait else 15)
     body_f = font(FONT_REG, 24 if not portrait else 25)
-    bullet_f = font(FONT_BULLET, 25 if not portrait else 26)
+    bullet_f = font(FONT_REG, 25 if not portrait else 26)
     project_f = font(FONT_BOLD, 24 if not portrait else 26)
     meta_f = font(FONT_REG, 14)
 
@@ -233,32 +241,38 @@ def main():
     content_bottom = height - outer_pad - 44
     content_left = outer_pad
     content_right = width - outer_pad
+    content_fill = theme["title"] if theme_name in ("midnight", "carbon") else theme["text"]
 
     def card(box, radius=28):
         rounded_rectangle(draw, box, radius, theme["card"], outline=theme["border"], width=1)
 
-    def add_tag(x, y, text):
+    def add_tag_centered(box_top, box_left, box_right, text):
         if not text:
-            return y
-        tw = int(draw.textlength(text, font=subtitle_f)) + 28
-        rounded_rectangle(draw, (x, y, x + tw, y + 34), 17, (255,255,255,18), outline=theme["border"], width=1)
-        draw.text((x + 14, y + 8), text, font=subtitle_f, fill=theme["title"])
-        return y + 48
+            return box_top
+        tw = int(text_width(draw, text, subtitle_f)) + 28
+        x = (box_left + box_right - tw) / 2
+        rounded_rectangle(draw, (x, box_top, x + tw, box_top + 34), 17, (255,255,255,18), outline=theme["border"], width=1)
+        draw.text((x + 14, box_top + 8), text, font=subtitle_f, fill=theme["title"])
+        return box_top + 48
 
-    def text_block(box):
+    def text_block_centered(box):
         x1, y1, x2, y2 = box
-        y = add_tag(x1 + 34, y1 + 32, subtitle)
-        if not subtitle:
-            y = y1 + 32
-        draw.multiline_text((x1 + 34, y), title, font=title_f, fill=theme["title"], spacing=6)
-        title_h = 70 if not portrait else 64
-        y += title_h + 10
-        content_fill = theme["title"] if theme_name == "midnight" else theme["text"]
+        y = add_tag_centered(y1 + 28, x1, x2, subtitle) if subtitle else y1 + 34
+        title_lines = wrap_text(draw, title, title_f, (x2 - x1) - 100)
+        cx = (x1 + x2) / 2
+        ascent, descent = title_f.getmetrics()
+        title_h = ascent + descent + 12
+        for line in title_lines:
+            centered_text(draw, line, y, title_f, theme["title"], cx)
+            y += title_h
+        y += 14
         if bullets:
-            y = draw_bullets(draw, bullets, (x1 + 34, y, x2 - 30, y2 - 36), bullet_f, content_fill, theme["accent2"])
-            y += 8
-        if body:
-            draw_paragraph(draw, body, (x1 + 34, y, x2 - 30, y2 - 30), body_f, content_fill)
+            y = draw_centered_bullets(draw, bullets, (x1 + 38, y, x2 - 38, y2 - 48), bullet_f, content_fill, theme["accent2"])
+            y += 10
+        elif body:
+            draw_centered_paragraph(draw, body, (x1 + 44, y, x2 - 44, y2 - 44), body_f, content_fill)
+        else:
+            centered_text(draw, "Add content", y, body_f, content_fill, cx)
 
     if layout in ("image-right-text-left", "image-left-text-right"):
         gap = 24
@@ -272,76 +286,67 @@ def main():
             text_box, media_box = (left_box, right_box) if layout == "image-right-text-left" else (right_box, left_box)
         card(text_box)
         card(media_box)
-        text_block(text_box)
+        text_block_centered(text_box)
         if image_path and os.path.exists(image_path):
             fit_and_paste(base, image_path, (media_box[0] + 18, media_box[1] + 18, media_box[2] - 18, media_box[3] - 18), contain=True)
         else:
             rounded_rectangle(draw, (media_box[0] + 18, media_box[1] + 18, media_box[2] - 18, media_box[3] - 18), 22, (255,255,255,12), outline=theme["border"], width=2)
             msg = "Drop screen image here"
-            tw = draw.textlength(msg, font=body_f)
-            draw.text((media_box[0] + ((media_box[2]-media_box[0])-tw)/2, media_box[1] + (media_box[3]-media_box[1])/2 - 12), msg, font=body_f, fill=theme["title"])
-
+            centered_text(draw, msg, media_box[1] + ((media_box[3]-media_box[1]) / 2) - 12, body_f, theme["title"], (media_box[0] + media_box[2]) / 2)
     elif layout == "title-bullets":
         box = (content_left, content_top, content_right, content_bottom)
         card(box)
-        text_block(box)
-
+        text_block_centered(box)
     elif layout == "full-image-overlay":
         box = (content_left, content_top, content_right, content_bottom)
         if image_path and os.path.exists(image_path):
             fit_and_paste(base, image_path, box, radius=28, contain=False)
         else:
             card(box)
-        ow = int((content_right - content_left) * (0.52 if not portrait else 0.92))
-        oh = int((content_bottom - content_top) * (0.44 if not portrait else 0.34))
-        overlay = (content_left + 26, content_bottom - oh - 26, content_left + 26 + ow, content_bottom - 26)
+        ow = int((content_right - content_left) * (0.62 if not portrait else 0.92))
+        oh = int((content_bottom - content_top) * (0.48 if not portrait else 0.38))
+        overlay = ((width - ow)//2, content_bottom - oh - 26, (width + ow)//2, content_bottom - 26)
         card(overlay)
-        text_block(overlay)
-
+        text_block_centered(overlay)
     elif layout == "two-column-text":
         box = (content_left, content_top, content_right, content_bottom)
         card(box)
-        y = add_tag(content_left + 34, content_top + 32, subtitle)
-        if not subtitle:
-            y = content_top + 32
-        draw.text((content_left + 34, y), title, font=title_f, fill=theme["title"])
-        y += 86 if not portrait else 74
+        y = add_tag_centered(content_top + 26, content_left, content_right, subtitle) if subtitle else content_top + 30
+        title_lines = wrap_text(draw, title, title_f, (content_right - content_left) - 120)
+        cx = (content_left + content_right) / 2
+        ascent, descent = title_f.getmetrics()
+        line_h = ascent + descent + 12
+        for line in title_lines:
+            centered_text(draw, line, y, title_f, theme["title"], cx)
+            y += line_h
+        y += 24
         inner_gap = 28
         mid = content_left + (content_right - content_left) // 2
         left_col = (content_left + 34, y, mid - inner_gap, content_bottom - 34)
         right_col = (mid + inner_gap, y, content_right - 34, content_bottom - 34)
-        content_fill = theme["title"] if theme_name == "midnight" else theme["text"]
         if bullets:
-            draw_bullets(draw, bullets, left_col, bullet_f, content_fill, theme["accent2"])
+            draw_centered_bullets(draw, bullets, left_col, bullet_f, content_fill, theme["accent2"])
         else:
-            draw.text((left_col[0], left_col[1]), "Add bullet points", font=body_f, fill=content_fill)
+            centered_text(draw, "Add bullet points", left_col[1], body_f, content_fill, (left_col[0] + left_col[2]) / 2)
         if body:
-            draw_paragraph(draw, body, right_col, body_f, content_fill)
+            draw_centered_paragraph(draw, body, right_col, body_f, content_fill)
         else:
-            draw.text((right_col[0], right_col[1]), "Add body text", font=body_f, fill=content_fill)
-
+            centered_text(draw, "Add body text", right_col[1], body_f, content_fill, (right_col[0] + right_col[2]) / 2)
     elif layout == "section-divider":
         y = (content_top + content_bottom) // 2
         draw.line((content_left, y, content_right, y), fill=theme["accent"], width=3)
         box_w = int((content_right - content_left) * (0.72 if not portrait else 0.86))
-        box_h = int((content_bottom - content_top) * (0.36 if not portrait else 0.28))
+        box_h = int((content_bottom - content_top) * (0.36 if not portrait else 0.30))
         box = ((width - box_w)//2, (height - box_h)//2, (width + box_w)//2, (height + box_h)//2)
         card(box, radius=30)
-        y = add_tag(box[0] + 34, box[1] + 30, subtitle)
-        if not subtitle:
-            y = box[1] + 30
-        tw = draw.textlength(title, font=title_f)
-        draw.text((box[0] + (box_w - tw)/2, y), title, font=title_f, fill=theme["title"])
-        if body:
-            content_fill = theme["title"] if theme_name == "midnight" else theme["text"]
-            draw_paragraph(draw, body, (box[0] + 50, y + 84, box[2] - 50, box[3] - 30), body_f, content_fill)
+        text_block_centered(box)
 
     if presenter_path and os.path.exists(presenter_path):
         size = 100 if not portrait else 116
         draw_presenter(base, presenter_path, (outer_pad - (26 if portrait else 30), height - outer_pad - size + (18 if portrait else 26), outer_pad - (26 if portrait else 30) + size, height - outer_pad + (18 if portrait else 26)))
 
     footer_tag = f"{layout}"
-    fw = int(draw.textlength(footer_tag, font=meta_f)) + 30
+    fw = int(text_width(draw, footer_tag, meta_f)) + 30
     fx = width - outer_pad - fw
     fy = height - outer_pad
     rounded_rectangle(draw, (fx, fy - 36, fx + fw, fy), 18, theme["card"], outline=theme["border"], width=1)

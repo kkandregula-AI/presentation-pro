@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-dejavu-core \
     fonts-liberation \
     fonts-noto-core \
+    fonts-roboto \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
